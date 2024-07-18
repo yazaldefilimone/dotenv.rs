@@ -3,15 +3,20 @@ mod commands;
 mod crypto;
 mod env;
 mod storage;
-use commands::{run_with_command, scanner_workspace};
+mod utils;
+
+use env::loader::load_workspace;
 
 fn main() {
+  println!("Hello, world, env: {:?}", std::env::var("API_URL"));
   let matches = cli::command_line();
   match matches.subcommand() {
     Some(("run", sub_matches)) => {
       let command: Vec<String> = sub_matches.get_many("COMMAND").unwrap().cloned().collect();
-      run_with_command(&command);
+      commands::run(&command);
     }
-    _ => scanner_workspace(),
+    _ => {
+      load_workspace();
+    }
   }
 }
