@@ -1,13 +1,15 @@
 #![allow(dead_code, unused_variables)]
 
-use crate::env;
+use crate::{crypto, env};
 use std::process::{Command, Stdio};
 
-pub fn run_with_command(command: &Vec<String>) {
+pub fn run(command: &Vec<String>) {
   let cmd = command.get(0).expect("Error: no command found");
   let args: Vec<&str> = command.iter().skip(1).map(|s| s.as_str()).collect();
-
-  scanner_workspace();
+  let envs = env::loader::load_workspace();
+  for (key, value) in envs {
+    std::env::set_var(key, value);
+  }
 
   let mut child = Command::new(cmd)
     .args(&args)
@@ -18,12 +20,13 @@ pub fn run_with_command(command: &Vec<String>) {
   child.wait().expect("Error: failed to wait for child");
 }
 
-pub fn scanner_workspace() {
-  let workspace = std::env::current_dir().unwrap();
-  let workspace_envs = env::scanner(&workspace);
-  let parsed = env::parser(&workspace_envs);
-  if let Err(e) = &parsed {
-    eprintln!("Error: {}", e);
-  }
-  println!("{} .env's, {} parsed", workspace_envs.len(), parsed.unwrap().len());
+pub fn set_env(key: &str, value: &str) {
+  std::env::set_var(key, value);
+}
+
+// generate keys, private and public
+pub fn generate_keys() -> crypto::keys::Keys {
+  let keys = crypto::keys::create_new_keys();
+  // todo: save private key and print public key
+  return keys;
 }
