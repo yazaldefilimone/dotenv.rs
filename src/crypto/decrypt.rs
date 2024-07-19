@@ -1,32 +1,49 @@
 #![allow(dead_code, unused_variables)]
+use super::base64::base64_decode;
+use crate::utils::{ENCRYPTED_VALUE_PREFIX, NONCE_BYTYES_LENGTH};
 use hex;
 use ring::aead;
-use secp256k1::PublicKey;
+use secp256k1::SecretKey;
 use std::error::Error;
 
-use crate::utils::NUMBER_USED_ONE_BYTE_LENGTH;
+pub fn decrypt_value(value: &str, private_key_str: &str) -> Result<String, Box<dyn Error>> {
+  if !value.starts_with(ENCRYPTED_VALUE_PREFIX) {
+    return Err("Error: value is not encrypted".into());
+  }
 
-use super::base64::base64_decode;
+  let encrypted_value = value.trim_start_matches(ENCRYPTED_VALUE_PREFIX);
 
-pub fn decrypt(encrypted_value: &str, private_key_str: &str) -> Result<String, Box<dyn Error>> {
-  let private_key_bytes = hex::decode(private_key_str)?;
-  let private_key = PrivateKey::from_slice(&private_key_bytes).expect("Error: failed to create private key");
+  if encrypted_value.is_empty() {
+    return Err("Error: encrypted value is empty".into());
+  }
 
-  let mut encrypted_value_bytes = base64_decode(encrypted_value).expect("Error: failed to decode base64");
-  let nonce = encrypted_value_bytes[..NUMBER_USED_ONE_BYTE_LENGTH].to_vec();
-  let encrypted_value_bytes = encrypted_value_bytes[NUMBER_USED_ONE_BYTE_LENGTH..].to_vec();
+  let encrypted_bytes = base64_decode(encrypted_value).expect("Error: invalid base64 value");
 
-  let opening_key = aead::UnboundKey::new(&aead::AES_256_GCM, private_key.serialize().as_ref()).unwrap();
-  let opening_key = aead::LessSafeKey::new(opening_key);
+  let nonce = &encrypted_bytes[..NONCE_BYTYES_LENGTH];
+  let mut ciphertext = encrypted_bytes[NONCE_BYTYES_LENGTH..].to_vec();
 
-  let mut decrypted_value = Vec::new();
+  let private_key_bytes = hex::decode(private_key_str).unwrap();
+  let private_key = SecretKey::from_slice(&private_key_bytes).unwrap();
+
+  let sealing_key = aead::UnboundKey::new(&aead::AES_256_GCM, private_key.as_ref());
+
+  if sealing_key.is_err() {
+    return Err("Error: failed to create sealing key".into());
+  }
+
+  let opening_key = aead::LessSafeKey::new(sealing_key.unwrap());
+
+  let one_time_key = aead::Nonce::try_assume_unique_for_key(nonce).unwrap();
+
   let add_auth_data = aead::Aad::empty();
 
-  let one_time_key = aead::Nonce::assume_unique_for_key(nonce);
+  let decrypted_data = opening_key.open_in_place(one_time_key, add_auth_data, &mut ciphertext);
 
-  opening_key
-    .open_in_place(one_time_key, add_auth_data, &mut encrypted_value_bytes)
-    .unwrap();
+  if decrypted_data.is_err() {
+    return Err("Error: failed to decrypt value".into());
+  }
 
-  Ok(String::from_utf8(decrypted_value)?)
+  let decrypted_value = String::from_utf8(decrypted_data.unwrap().to_vec())?;
+
+  Ok(decrypted_value)
 }

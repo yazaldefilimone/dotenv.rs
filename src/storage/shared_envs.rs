@@ -1,3 +1,5 @@
+#![allow(dead_code, unused_variables)]
+
 pub fn shared_envs_with_group() {
   todo!("hei, why you not implement me :(");
 }

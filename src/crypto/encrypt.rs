@@ -1,21 +1,27 @@
-use base64::{engine::general_purpose, Engine as _};
+#![allow(dead_code, unused_variables)]
+
 use hex;
 use ring::aead;
+use ring::digest;
 use ring::rand::{SecureRandom, SystemRandom};
-use secp256k1::PublicKey;
+// use secp256k1::PublicKey;
 use std::error::Error;
 
-use crate::utils::NUMBER_USED_ONE_BYTE_LENGTH;
+use super::base64::base64_encode;
+use crate::utils::{ENCRYPTED_VALUE_PREFIX, NONCE_BYTYES_LENGTH};
 
 pub fn encrypt_value(value: &str, public_key_str: &str) -> Result<String, Box<dyn Error>> {
-  let public_key_bytes = hex::decode(public_key_str)?;
-  let public_key = PublicKey::from_slice(&public_key_bytes)?;
+  let public_key_bytes = hex::decode(public_key_str).expect("Error: invalid public key");
+  // let public_key = PublicKey::from_slice(&public_key_bytes).expect("Error: invalid public key");
 
   let rng = SystemRandom::new();
-  let mut nonce = [0u8; NUMBER_USED_ONE_BYTE_LENGTH];
+  let mut nonce = [0u8; NONCE_BYTYES_LENGTH];
   rng.fill(&mut nonce).expect("Error: failed to fill nonce");
 
-  let sealing_key = aead::UnboundKey::new(&aead::AES_256_GCM, public_key.serialize().as_ref()).unwrap();
+  // Derive a symmetric key from the public key using SHA-256
+  let public_key_hash = digest::digest(&digest::SHA256, &public_key_bytes[1..]); // Remove o primeiro byte (0x04)
+
+  let sealing_key = aead::UnboundKey::new(&aead::AES_256_GCM, public_key_hash.as_ref()).unwrap();
   let sealing_key = aead::LessSafeKey::new(sealing_key);
 
   let mut in_out = value.as_bytes().to_vec();
@@ -28,15 +34,9 @@ pub fn encrypt_value(value: &str, public_key_str: &str) -> Result<String, Box<dy
     .unwrap();
 
   let mut encrypted_value = nonce.to_vec();
-
   encrypted_value.extend_from_slice(&in_out);
 
   let encrypted_value = base64_encode(&encrypted_value);
-  Ok(format!("encrypted:{}", encrypted_value))
-}
-
-pub fn base64_encode(input: &[u8]) -> String {
-  let mut output_buf = String::new();
-  general_purpose::STANDARD.encode_string(input, &mut output_buf);
-  output_buf
+  let encrypted_value = format!("{}{}", ENCRYPTED_VALUE_PREFIX, encrypted_value);
+  Ok(encrypted_value)
 }

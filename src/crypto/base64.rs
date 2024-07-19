@@ -1,4 +1,7 @@
-use base64::{engine::general_purpose, Engine as _}; // base64 encode and decode
+#![allow(dead_code, unused_variables)]
+
+use base64::{engine::general_purpose, Engine as _};
+
 use std::error::Error;
 
 pub fn base64_encode(input: &[u8]) -> String {
